@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Predictor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@400;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ground:#15170F;
+    --panel:#1C1F16;
+    --turf:#33503B;
+    --turf-light:#3F6249;
+    --brass:#C2A159;
+    --brass-dim:#8A7642;
+    --parchment:#EDE6D6;
+    --parchment-dim:#A8A290;
+    --risk:#A34A3D;
+    --line:#33351f55;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--ground);
+    color:var(--parchment);
+    font-family:'JetBrains Mono', monospace;
+    padding:24px 16px 60px;
+  }
+  .wrap{max-width:760px;margin:0 auto;}
+  header{
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    border-bottom:2px solid var(--brass);
+    padding-bottom:14px;
+    margin-bottom:22px;
+    flex-wrap:wrap;
+    gap:8px;
+  }
+  .wordmark{
+    font-family:'Roboto Slab', serif;
+    font-weight:700;
+    font-size:26px;
+    letter-spacing:0.5px;
+    color:var(--parchment);
+  }
+  .wordmark span{color:var(--brass);}
+  .tag{
+    font-size:12px;
+    color:var(--parchment-dim);
+  }
+  h2{
+    font-family:'Roboto Slab', serif;
+    font-size:15px;
+    font-weight:600;
+    margin:28px 0 10px;
+    color:var(--brass);
+  }
+  .race-fields{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:10px;
+  }
+  input, select{
+    background:var(--panel);
+    border:1px solid var(--turf-light);
+    color:var(--parchment);
+    padding:9px 10px;
+    font-family:inherit;
+    font-size:13px;
+    border-radius:2px;
+    width:100%;
+  }
+  input::placeholder{color:var(--parchment-dim);}
+  table{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:4px;}
+  th{
+    text-align:left;
+    color:var(--brass-dim);
+    font-weight:600;
+    font-size:11px;
+    text-transform:uppercase;
+    letter-spacing:0.5px;
+    padding:6px 4px;
+    border-bottom:1px solid var(--turf-light);
+  }
+  td{padding:5px 4px;border-bottom:1px solid #2a2c1f;}
+  td input{padding:6px 6px;font-size:12.5px;}
+  .num-cell{
+    font-family:'Roboto Slab', serif;
+    font-weight:700;
+    color:var(--ground);
+    background:var(--brass);
+    width:22px;
+    height:22px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    border-radius:50%;
+    font-size:12px;
+  }
+  .col-num{width:32px;}
+  .row-remove{
+    background:none;border:none;color:var(--risk);cursor:pointer;font-size:16px;padding:0 6px;
+  }
+  .btn{
+    background:none;
+    border:1px solid var(--brass-dim);
+    color:var(--brass);
+    padding:8px 14px;
+    font-family:inherit;
+    font-size:12px;
+    cursor:pointer;
+    border-radius:2px;
+    margin-top:10px;
+  }
+  .btn:hover{background:var(--brass);color:var(--ground);}
+  .btn-main{
+    display:block;
+    width:100%;
+    background:var(--turf);
+    border:1px solid var(--turf-light);
+    color:var(--parchment);
+    padding:14px;
+    font-size:14px;
+    letter-spacing:1px;
+    text-transform:uppercase;
+    font-weight:600;
+    margin-top:22px;
+    cursor:pointer;
+    border-radius:3px;
+  }
+  .btn-main:hover{background:var(--turf-light);}
+  .btn-main:disabled{opacity:0.5;cursor:default;}
+  #results{margin-top:30px;}
+  .pick{
+    background:var(--panel);
+    border-left:3px solid var(--brass);
+    padding:14px 16px;
+    margin-bottom:10px;
+    border-radius:2px;
+  }
+  .pick-top{
+    display:flex;
+    justify-content:space-between;
+    align-items:baseline;
+    margin-bottom:8px;
+  }
+  .pick-name{
+    font-family:'Roboto Slab', serif;
+    font-weight:700;
+    font-size:16px;
+    color:var(--parchment);
+  }
+  .pick-rank{color:var(--brass-dim);font-size:11px;text-transform:uppercase;}
+  .conf-track{
+    background:#2a2c1f;
+    height:6px;
+    border-radius:3px;
+    overflow:hidden;
+    margin:6px 0 10px;
+  }
+  .conf-fill{
+    height:100%;
+    background:var(--brass);
+  }
+  .pick-note{
+    font-size:12.5px;
+    line-height:1.5;
+    color:var(--parchment-dim);
+  }
+  .loading, .error{
+    text-align:center;
+    padding:20px;
+    color:var(--parchment-dim);
+    font-size:13px;
+  }
+  .error{color:var(--risk);}
+  .disclaimer{
+    margin-top:36px;
+    font-size:10.5px;
+    color:var(--parchment-dim);
+    border-top:1px solid var(--turf-light);
+    padding-top:14px;
+    line-height:1.5;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="wordmark">FORM<span>EDGE</span></div>
+    <div class="tag">AI Predictor — prototype</div>
+  </header>
+
+  <h2>Today's Races</h2>
+  <div class="race-fields">
+    <select id="racePicker">
+      <option value="">Loading races…</option>
+    </select>
+    <button class="btn" style="margin-top:0" onclick="loadSelectedRace()">Load this race</button>
+  </div>
+  <div id="racePickerNote" class="tag" style="margin-top:8px;"></div>
+
+  <h2>Race Details</h2>
+  <div class="race-fields">
+    <input id="track" placeholder="Track (e.g. Randwick)">
+    <input id="distance" placeholder="Distance (e.g. 1400m)">
+    <input id="going" placeholder="Track condition (e.g. Good 4)">
+    <input id="raceName" placeholder="Race name / class">
+  </div>
+
+  <h2>Runners</h2>
+  <table id="runnerTable">
+    <thead>
+      <tr>
+        <th class="col-num">#</th>
+        <th>Horse</th>
+        <th>Jockey</th>
+        <th>Wgt</th>
+        <th>Barrier</th>
+        <th>Recent form</th>
+        <th>Odds</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody id="runnerBody"></tbody>
+  </table>
+  <button class="btn" onclick="addRow()">+ Add runner</button>
+
+  <button class="btn-main" id="analyzeBtn" onclick="analyzeRace()">Analyze Race</button>
+
+  <div id="results"></div>
+
+  <div class="disclaimer">
+    Prototype for exploring AI-generated race analysis. Not betting advice — output is generated by a language model from the data you enter, not verified racing data. Odds and form are illustrative unless you supply real figures. If gambling stops being fun, contact Gambling Help on 1800 858 858.
+  </div>
+</div>
+
+<script>
+let rowCount = 0;
+
+function addRow(data){
+  rowCount++;
+  const tbody = document.getElementById('runnerBody');
+  const tr = document.createElement('tr');
+  const d = data || {};
+  tr.innerHTML = `
+    <td><div class="num-cell">${rowCount}</div></td>
+    <td><input class="f-horse" value="${d.horse||''}" placeholder="Horse name"></td>
+    <td><input class="f-jockey" value="${d.jockey||''}" placeholder="Jockey"></td>
+    <td><input class="f-wgt" value="${d.wgt||''}" placeholder="58.5"></td>
+    <td><input class="f-barrier" value="${d.barrier||''}" placeholder="4"></td>
+    <td><input class="f-form" value="${d.form||''}" placeholder="1-2-4-1"></td>
+    <td><input class="f-odds" value="${d.odds||''}" placeholder="3.50"></td>
+    <td><button class="row-remove" onclick="this.closest('tr').remove()">✕</button></td>
+  `;
+  tbody.appendChild(tr);
+}
+
+// seed with 4 blank rows to start
+for(let i=0;i<4;i++) addRow();
+
+// --- Race picker: loads today's races and can auto-fill everything below ---
+
+async function loadTodaysRaces(){
+  const picker = document.getElementById('racePicker');
+  const note = document.getElementById('racePickerNote');
+  try{
+    const res = await fetch('/api/races');
+    const data = await res.json();
+    if(data.error) throw new Error(data.error);
+
+    picker.innerHTML = '<option value="">Select a race…</option>';
+    data.races.forEach(r => {
+      const opt = document.createElement('option');
+      opt.value = r.raceId;
+      opt.textContent = `${r.track} R${r.raceNumber} — ${r.raceName} (${r.startTime || ''})`;
+      picker.appendChild(opt);
+    });
+    note.textContent = '';
+  }catch(err){
+    console.error(err);
+    picker.innerHTML = '<option value="">Race list unavailable</option>';
+    note.textContent = 'Live race list isn\'t connected yet — use manual entry below, or check back once Punting Form API access is set up.';
+  }
+}
+loadTodaysRaces();
+
+async function loadSelectedRace(){
+  const raceId = document.getElementById('racePicker').value;
+  if(!raceId) return;
+
+  const btn = document.getElementById('analyzeBtn');
+  const resultsEl = document.getElementById('results');
+  btn.disabled = true;
+  resultsEl.innerHTML = '<div class="loading">Loading race and analyzing...</div>';
+
+  try{
+    const response = await fetch('/api/predict', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ raceId })
+    });
+    const data = await response.json();
+    if(data.error) throw new Error(data.error);
+
+    // Auto-fill the race details and runner table from what came back
+    document.getElementById('track').value = data.meta.track || '';
+    document.getElementById('distance').value = data.meta.distance || '';
+    document.getElementById('going').value = data.meta.going || '';
+    document.getElementById('raceName').value = data.meta.raceName || '';
+
+    document.getElementById('runnerBody').innerHTML = '';
+    rowCount = 0;
+    data.runners.forEach(r => addRow({
+      horse: r.horse, jockey: r.jockey, wgt: r.weight,
+      barrier: r.barrier, form: r.form, odds: r.odds
+    }));
+
+    renderPicks(data.picks);
+  }catch(err){
+    console.error(err);
+    resultsEl.innerHTML = '<div class="error">Couldn\'t load that race. Try manual entry instead.</div>';
+  }finally{
+    btn.disabled = false;
+  }
+}
+
+function renderPicks(picks){
+  const resultsEl = document.getElementById('results');
+  resultsEl.innerHTML = '';
+  picks.forEach((p, i) => {
+    const div = document.createElement('div');
+    div.className = 'pick';
+    div.innerHTML = `
+      <div class="pick-top">
+        <div class="pick-name">${p.horse}</div>
+        <div class="pick-rank">${i===0 ? 'Top pick' : '#'+(i+1)}</div>
+      </div>
+      <div class="conf-track"><div class="conf-fill" style="width:${p.confidence}%"></div></div>
+      <div class="pick-note">${p.reasoning}</div>
+    `;
+    resultsEl.appendChild(div);
+  });
+}
+
+async function analyzeRace(){
+  const btn = document.getElementById('analyzeBtn');
+  const resultsEl = document.getElementById('results');
+  const track = document.getElementById('track').value || 'Unspecified track';
+  const distance = document.getElementById('distance').value || 'Unspecified distance';
+  const going = document.getElementById('going').value || 'Unspecified going';
+  const raceName = document.getElementById('raceName').value || 'Unnamed race';
+
+  const rows = document.querySelectorAll('#runnerBody tr');
+  const runners = [];
+  rows.forEach(row=>{
+    const horse = row.querySelector('.f-horse').value.trim();
+    if(!horse) return;
+    runners.push({
+      horse,
+      jockey: row.querySelector('.f-jockey').value.trim(),
+      weight: row.querySelector('.f-wgt').value.trim(),
+      barrier: row.querySelector('.f-barrier').value.trim(),
+      form: row.querySelector('.f-form').value.trim(),
+      odds: row.querySelector('.f-odds').value.trim(),
+    });
+  });
+
+  if(runners.length < 2){
+    resultsEl.innerHTML = '<div class="error">Enter at least two runners with a horse name.</div>';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Analyzing...';
+  resultsEl.innerHTML = '<div class="loading">Reading the form...</div>';
+
+  try{
+    // Calls OUR backend (/api/predict), which holds the real API keys
+    // and does the Punting Form + Claude calls server-side.
+    const response = await fetch("/api/predict", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        raceName, track, distance, going,
+        manualRunners: runners
+      })
+    });
+
+    const data = await response.json();
+    if(data.error) throw new Error(data.error);
+    renderPicks(data.picks);
+  }catch(err){
+    console.error(err);
+    resultsEl.innerHTML = '<div class="error">Something went wrong generating the analysis. Try again.</div>';
+  }finally{
+    btn.disabled = false;
+    btn.textContent = 'Analyze Race';
+  }
+}
+</script>
+</body>
+</html>
