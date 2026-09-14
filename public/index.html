@@ -193,13 +193,17 @@
     <div class="tag">AI Predictor — prototype</div>
   </header>
 
-  <h2>Today's Races</h2>
+  <h2>Races</h2>
   <div class="race-fields">
+    <select id="dayToggle" onchange="loadTodaysRaces()">
+      <option value="0">Today</option>
+      <option value="1">Tomorrow</option>
+    </select>
     <select id="racePicker">
       <option value="">Loading races…</option>
     </select>
-    <button class="btn" style="margin-top:0" onclick="loadSelectedRace()">Load this race</button>
   </div>
+  <button class="btn" onclick="loadSelectedRace()">Load this race</button>
   <div id="racePickerNote" class="tag" style="margin-top:8px;"></div>
 
   <h2>Race Details</h2>
@@ -266,8 +270,10 @@ for(let i=0;i<4;i++) addRow();
 async function loadTodaysRaces(){
   const picker = document.getElementById('racePicker');
   const note = document.getElementById('racePickerNote');
+  const dayOffset = document.getElementById('dayToggle').value;
+  picker.innerHTML = '<option value="">Loading races…</option>';
   try{
-    const res = await fetch('/api/races');
+    const res = await fetch(`/api/races?dayOffset=${dayOffset}`);
     const data = await res.json();
     if(data.error) throw new Error(data.error);
 
