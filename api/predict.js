@@ -111,6 +111,9 @@ Respond ONLY with a JSON array (no markdown, no commentary), one object per runn
     });
 
     const claudeData = await claudeResponse.json();
+    if (!claudeResponse.ok || !claudeData.content) {
+      throw new Error(`Claude API error: ${claudeData.error ? claudeData.error.message : claudeResponse.status}`);
+    }
     const text = claudeData.content.map(b => b.text || '').join('\n');
     const clean = text.replace(/```json|```/g, '').trim();
     const picks = JSON.parse(clean);
