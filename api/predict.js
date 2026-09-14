@@ -23,55 +23,50 @@ module.exports = async function handler(req, res) {
       const [meetingId, raceNumber] = raceId.split('|');
 
       const fieldsData = await pfGet('/form/fields', { meetingId, raceNumber });
-      const formData = await pfGet('/form/form', { meetingId, raceNumber, runs: 5 });
-      const scratchData = await pfGet('/Updates/Scratchings', {});
 
-      // Punting Form wraps every response in a payLoad field (confirmed from a
-      // real /form/meetingslist response) — applying that same pattern here.
-      // The field names *inside* payLoad for these specific endpoints are
-      // still a best guess, since we've only confirmed meetingslist's shape
-      // so far. If runners/form/scratchings come back empty or wrong, this
-      // is the next thing to check against a real response.
-      const fieldRunners = fieldsData.payLoad ?? [];
-      const formRunners = formData.payLoad ?? [];
-      const scratchings = scratchData.payLoad ?? [];
+      // Confirmed real shape (from a live /form/fields response): payLoad is
+      // an object for the meeting with a "races" array inside it, each race
+      // having its own "runners" array. Requesting a specific raceNumber
+      // (rather than 0) may come back as a one-item races array or as a
+      // single race directly under payLoad — this handles both.
+      const payload = fieldsData.payLoad || {};
+      const race = (payload.races && payload.races[0]) || payload;
+      const fieldRunners = race.runners || [];
 
-      const scratchedTabs = new Set(
-        scratchings
-          .filter(s => String(s.meetingId ?? s.MeetingId) === String(meetingId)
-            && String(s.raceNumber ?? s.RaceNumber) === String(raceNumber))
-          .map(s => s.tabNo ?? s.TabNo)
-      );
+      // Scratched runners: best-effort. This endpoint's response shape
+      // hasn't been confirmed against real data yet, so if it fails or
+      // doesn't match, we just skip the filtering rather than breaking
+      // the whole race.
+      let scratchedTabs = new Set();
+      try {
+        const scratchData = await pfGet('/Updates/Scratchings', {});
+        const scratchings = scratchData.payLoad || [];
+        scratchedTabs = new Set(
+          scratchings
+            .filter(s => String(s.meetingId) === String(meetingId)
+              && String(s.raceNumber ?? s.number) === String(raceNumber))
+            .map(s => s.tabNo)
+        );
+      } catch (scratchErr) {
+        console.error('Scratchings lookup failed, continuing without it:', scratchErr.message);
+      }
 
       runners = fieldRunners
-        .filter(r => !scratchedTabs.has(r.tabNo ?? r.TabNo))
-        .map(r => {
-          const tabNo = r.tabNo ?? r.TabNo;
-          const horseName = r.horseName ?? r.HorseName ?? r.runnerName ?? r.RunnerName;
-
-          const matchingForm = formRunners.find(
-            f => (f.tabNo ?? f.TabNo) === tabNo || (f.horseName ?? f.HorseName) === horseName
-          );
-          const runs = matchingForm ? (matchingForm.runs ?? matchingForm.Runs ?? []) : [];
-          const formString = runs
-            .map(run => run.finishPosition ?? run.FinishPosition ?? '?')
-            .join('-');
-
-          return {
-            horse: horseName,
-            jockey: r.jockeyName ?? r.JockeyName ?? '',
-            weight: r.weight ?? r.Weight ?? '',
-            barrier: r.barrier ?? r.Barrier ?? '',
-            form: formString,
-            odds: 'n/a', // Punting Form doesn't provide market odds — that's Betfair's job, added later
-          };
-        });
+        .filter(r => !scratchedTabs.has(r.tabNo))
+        .map(r => ({
+          horse: r.name,
+          jockey: (r.jockey && r.jockey.fullName) || '',
+          weight: r.weight || '',
+          barrier: r.barrier || '',
+          form: (r.last10 || '').trim(),
+          odds: 'n/a', // Punting Form doesn't provide market odds — that's Betfair's job, added later
+        }));
 
       raceMeta = {
-        track: fieldsData.track ?? fieldsData.Track ?? fieldsData.venueName ?? fieldsData.VenueName ?? track,
-        distance: fieldsData.distance ?? fieldsData.Distance ?? distance ?? '',
-        going: fieldsData.trackCondition ?? fieldsData.TrackCondition ?? going ?? '',
-        raceName: fieldsData.raceName ?? fieldsData.RaceName ?? raceName ?? `Race ${raceNumber}`,
+        track: (payload.track && payload.track.name) || track || '',
+        distance: race.distance || distance || '',
+        going: payload.expectedCondition || going || '',
+        raceName: race.name || raceName || `Race ${raceNumber}`,
       };
     } else if (manualRunners && manualRunners.length >= 2) {
       // --- Manual entry path (what the current prototype uses) ---
