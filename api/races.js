@@ -25,21 +25,19 @@ module.exports = async function handler(req, res) {
   try {
     const meetingDate = todayDate();
     const meetingsData = await pfGet('/form/meetingslist', { meetingDate });
-    const meetings = meetingsData.meetings || meetingsData.Meetings || meetingsData || [];
+    const meetings = meetingsData.payLoad || [];
 
     const races = [];
 
     for (const meeting of meetings) {
-      const meetingId = meeting.meetingId ?? meeting.MeetingId;
-      const track = meeting.track ?? meeting.Track ?? meeting.venueName ?? meeting.VenueName
-        ?? meeting.meetingName ?? meeting.MeetingName ?? 'Unknown track';
+      const meetingId = meeting.meetingId;
+      const track = (meeting.track && meeting.track.name) || 'Unknown track';
       if (!meetingId) continue;
 
       try {
         // raceNumber: 0 returns all races for the meeting
         const fieldsData = await pfGet('/form/fields', { meetingId, raceNumber: 0 });
-        const meetingRaces = fieldsData.races ?? fieldsData.Races
-          ?? fieldsData.fields ?? fieldsData.Fields ?? [];
+        const meetingRaces = fieldsData.payLoad || [];
 
         meetingRaces.forEach(r => {
           const raceNumber = r.raceNumber ?? r.RaceNumber;
