@@ -7,6 +7,16 @@
 
 const { pfGet } = require('../lib/puntingform');
 
+function formatRecord(rec) {
+  if (!rec || !rec.starts) return '';
+  return `${rec.starts}: ${rec.firsts}-${rec.seconds}-${rec.thirds}`;
+}
+
+function formatA2E(stat) {
+  if (!stat || stat.runners == null) return '';
+  return `A2E ${stat.a2E.toFixed(2)}, ${stat.strikeRate.toFixed(1)}% strike rate (${stat.wins}/${stat.runners})`;
+}
+
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Use POST' });
@@ -56,9 +66,26 @@ module.exports = async function handler(req, res) {
         .map(r => ({
           horse: r.name,
           jockey: (r.jockey && r.jockey.fullName) || '',
+          trainer: (r.trainer && r.trainer.fullName) || '',
+          age: r.age ?? '',
+          sex: r.sex || '',
           weight: r.weight || '',
+          weightTotal: r.weightTotal || '',
           barrier: r.barrier || '',
           form: (r.last10 || '').trim(),
+          gearChanges: r.gearChanges || '',
+          careerRecord: r.careerStarts != null
+            ? `${r.careerStarts}: ${r.careerWins}-${r.careerSeconds}-${r.careerThirds} ($${r.prizeMoney ?? 0})`
+            : '',
+          trackRecord: formatRecord(r.trackRecord),
+          distanceRecord: formatRecord(r.distanceRecord),
+          trackDistRecord: formatRecord(r.trackDistRecord),
+          firstUpRecord: formatRecord(r.firstUpRecord),
+          secondUpRecord: formatRecord(r.secondUpRecord),
+          jockeyA2ECareer: formatA2E(r.jockeyA2E_Career),
+          trainerA2ECareer: formatA2E(r.trainerA2E_Career),
+          trainerJockeyA2ECareer: formatA2E(r.trainerJockeyA2E_Career),
+          jockeyA2ELast100: formatA2E(r.jockeyA2E_Last100),
           odds: 'n/a', // Punting Form doesn't provide market odds — that's Betfair's job, added later
         }));
 
@@ -80,10 +107,34 @@ module.exports = async function handler(req, res) {
     const meta = raceMeta || { track, distance, going, raceName };
 
     const runnerLines = runners
-      .map(r => `- ${r.horse} | Jockey: ${r.jockey || 'n/a'} | Weight: ${r.weight || 'n/a'} | Barrier: ${r.barrier || 'n/a'} | Recent form: ${r.form || 'n/a'} | Odds: ${r.odds || 'n/a'}`)
+      .map(r => {
+        // Manual entry runners only have the basic fields — keep it simple
+        // for those. Live (Punting Form) runners get the full picture.
+        if (!r.trainer && !r.careerRecord) {
+          return `- ${r.horse} | Jockey: ${r.jockey || 'n/a'} | Weight: ${r.weight || 'n/a'} | Barrier: ${r.barrier || 'n/a'} | Recent form: ${r.form || 'n/a'} | Odds: ${r.odds || 'n/a'}`;
+        }
+        const extras = [
+          r.trainer && `Trainer: ${r.trainer}`,
+          (r.age || r.sex) && `${r.age || '?'}yo ${r.sex || ''}`.trim(),
+          r.weightTotal && r.weightTotal !== r.weight && `Weight: ${r.weight}kg (allocated ${r.weightTotal}kg)`,
+          r.careerRecord && `Career: ${r.careerRecord}`,
+          r.trackRecord && `Track record: ${r.trackRecord}`,
+          r.distanceRecord && `Distance record: ${r.distanceRecord}`,
+          r.trackDistRecord && `Track+distance record: ${r.trackDistRecord}`,
+          r.firstUpRecord && `First-up record: ${r.firstUpRecord}`,
+          r.secondUpRecord && `Second-up record: ${r.secondUpRecord}`,
+          r.jockeyA2ECareer && `Jockey A2E (career): ${r.jockeyA2ECareer}`,
+          r.trainerA2ECareer && `Trainer A2E (career): ${r.trainerA2ECareer}`,
+          r.trainerJockeyA2ECareer && `Trainer+jockey combo A2E: ${r.trainerJockeyA2ECareer}`,
+          r.jockeyA2ELast100 && `Jockey A2E (last 100 rides): ${r.jockeyA2ELast100}`,
+          r.gearChanges && `Gear changes: ${r.gearChanges}`,
+        ].filter(Boolean).join(' | ');
+
+        return `- ${r.horse} | Jockey: ${r.jockey || 'n/a'} | Weight: ${r.weight || 'n/a'} | Barrier: ${r.barrier || 'n/a'} | Recent form: ${r.form || 'n/a'} | Odds: ${r.odds || 'n/a'} | ${extras}`;
+      })
       .join('\n');
 
-    const prompt = `You are a horse racing form analyst. Analyze this race and rank the runners from most to least likely to win, based only on the data given. Be realistic — don't invent facts not provided. If odds are marked n/a, ignore them and reason from form, jockey, weight and barrier instead. If any of those are also blank, just work with whatever is actually provided.
+    const prompt = `You are a horse racing form analyst. Analyze this race and rank the runners from most to least likely to win, based only on the data given. Be realistic — don't invent facts not provided. If odds are marked n/a, ignore them and reason from form, jockey, trainer, career/track/distance records, and A2E stats instead. A2E (Actual-vs-Expected) above 1.0 means a jockey/trainer outperforms market expectation; below 1.0 means they underperform it — weigh this alongside raw strike rate. Note any gear changes, as they can signal a meaningful adjustment. If any field is blank, just work with whatever is actually provided.
 
 Race: ${meta.raceName || 'Unnamed race'}
 Track: ${meta.track || 'Unspecified'}
