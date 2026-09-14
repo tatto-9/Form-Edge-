@@ -28,7 +28,6 @@ module.exports = async function handler(req, res) {
     const meetings = meetingsData.payLoad || [];
 
     const races = [];
-    const debugErrors = []; // TEMPORARY — remove once races are loading correctly
 
     for (const meeting of meetings) {
       const meetingId = meeting.meetingId;
@@ -36,28 +35,30 @@ module.exports = async function handler(req, res) {
       if (!meetingId) continue;
 
       try {
-        // raceNumber: 0 returns all races for the meeting
+        // raceNumber: 0 returns all races for the meeting.
+        // payLoad here is a single object for the meeting, with the races
+        // in a nested "races" array (confirmed from a real response) —
+        // different shape from meetingslist, which was a flat array.
         const fieldsData = await pfGet('/form/fields', { meetingId, raceNumber: 0 });
-        const meetingRaces = fieldsData.payLoad || [];
+        const meetingRaces = (fieldsData.payLoad && fieldsData.payLoad.races) || [];
 
         meetingRaces.forEach(r => {
-          const raceNumber = r.raceNumber ?? r.RaceNumber;
+          const raceNumber = r.number;
           races.push({
             raceId: `${meetingId}|${raceNumber}`,
             track,
             raceNumber,
-            raceName: r.raceName ?? r.RaceName ?? `Race ${raceNumber}`,
-            startTime: r.startTime ?? r.StartTime ?? r.jumpTime ?? r.JumpTime ?? '',
+            raceName: r.name || `Race ${raceNumber}`,
+            startTime: r.startTime || '',
           });
         });
       } catch (innerErr) {
         // Don't let one bad meeting kill the whole list
         console.error(`Skipping meeting ${meetingId}:`, innerErr.message);
-        debugErrors.push({ meetingId, track, error: innerErr.message }); // TEMPORARY
       }
     }
 
-    return res.status(200).json({ races, debugErrors }); // TEMPORARY: remove debugErrors later
+    return res.status(200).json({ races });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: err.message });
