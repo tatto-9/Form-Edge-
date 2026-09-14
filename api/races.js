@@ -28,6 +28,7 @@ module.exports = async function handler(req, res) {
     const meetings = meetingsData.payLoad || [];
 
     const races = [];
+    const debugErrors = []; // TEMPORARY — remove once races are loading correctly
 
     for (const meeting of meetings) {
       const meetingId = meeting.meetingId;
@@ -52,10 +53,11 @@ module.exports = async function handler(req, res) {
       } catch (innerErr) {
         // Don't let one bad meeting kill the whole list
         console.error(`Skipping meeting ${meetingId}:`, innerErr.message);
+        debugErrors.push({ meetingId, track, error: innerErr.message }); // TEMPORARY
       }
     }
 
-    return res.status(200).json({ races });
+    return res.status(200).json({ races, debugErrors }); // TEMPORARY: remove debugErrors later
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: err.message });
