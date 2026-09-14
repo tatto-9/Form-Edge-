@@ -10,9 +10,8 @@
 
 const { pfGet } = require('../lib/puntingform');
 
-function todayDate() {
+function formatDate(d) {
   // Punting Form expects d-MMM-yyyy, e.g. 14-Sep-2026
-  const d = new Date();
   const month = d.toLocaleString('en-US', { month: 'short' });
   return `${d.getDate()}-${month}-${d.getFullYear()}`;
 }
@@ -23,7 +22,12 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    const meetingDate = todayDate();
+    // ?dayOffset=1 -> tomorrow's races (e.g. checking the night before)
+    const dayOffset = parseInt(req.query.dayOffset, 10) || 0;
+    const targetDate = new Date();
+    targetDate.setDate(targetDate.getDate() + dayOffset);
+    const meetingDate = formatDate(targetDate);
+
     const meetingsData = await pfGet('/form/meetingslist', { meetingDate });
     const meetings = meetingsData.payLoad || [];
 
@@ -44,6 +48,15 @@ module.exports = async function handler(req, res) {
 
         meetingRaces.forEach(r => {
           const raceNumber = r.number;
+          // Skip races that have already started/finished — no point
+          // "predicting" a race whose result already happened. For a
+          // future day this never trips, since every race on it is ahead
+          // of now.
+          // startTime looks like "9/14/2026 2:35:00 PM" (confirmed from a
+          // real response) — the Date constructor parses that format fine.
+          const start = r.startTime ? new Date(r.startTime) : null;
+          if (start && start.getTime() < Date.now()) return;
+
           races.push({
             raceId: `${meetingId}|${raceNumber}`,
             track,
