@@ -26,13 +26,15 @@ module.exports = async function handler(req, res) {
       const formData = await pfGet('/form/form', { meetingId, raceNumber, runs: 5 });
       const scratchData = await pfGet('/Updates/Scratchings', {});
 
-      // See the note at the top of api/races.js — same caveat applies here:
-      // field names below are best-guess since the response schema isn't
-      // publicly shown on Punting Form's docs site.
-      const fieldRunners = fieldsData.runners ?? fieldsData.Runners
-        ?? (fieldsData.races ?? fieldsData.Races ?? [])[0]?.runners ?? [];
-      const formRunners = formData.runners ?? formData.Runners ?? [];
-      const scratchings = scratchData.scratchings ?? scratchData.Scratchings ?? [];
+      // Punting Form wraps every response in a payLoad field (confirmed from a
+      // real /form/meetingslist response) — applying that same pattern here.
+      // The field names *inside* payLoad for these specific endpoints are
+      // still a best guess, since we've only confirmed meetingslist's shape
+      // so far. If runners/form/scratchings come back empty or wrong, this
+      // is the next thing to check against a real response.
+      const fieldRunners = fieldsData.payLoad ?? [];
+      const formRunners = formData.payLoad ?? [];
+      const scratchings = scratchData.payLoad ?? [];
 
       const scratchedTabs = new Set(
         scratchings
