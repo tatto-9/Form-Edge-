@@ -144,8 +144,13 @@ Going: ${meta.going || 'Unspecified'}
 Runners:
 ${runnerLines}
 
-Respond ONLY with a JSON array (no markdown, no commentary), one object per runner, ordered from most to least likely to win, in this exact shape:
-[{"horse": "name", "confidence": 1-100, "reasoning": "1-2 sentence analysis"}]`;
+Respond ONLY with a JSON object (no markdown, no commentary), in this exact shape:
+{
+  "verdict": "play" or "avoid",
+  "verdictReason": "1-2 sentence explanation of the verdict",
+  "picks": [{"horse": "name", "confidence": 1-100, "reasoning": "1-2 sentence analysis"}]
+}
+Order "picks" from most to least likely to win. Set "verdict" to "avoid" when the race is genuinely too unclear or even to call — e.g. no runner has a real edge, the field is wide open with no standout form, or the data is too thin to say anything useful. Use "avoid" honestly; don't default to "play" just to give an answer.`;
 
     const claudeResponse = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -156,7 +161,7 @@ Respond ONLY with a JSON array (no markdown, no commentary), one object per runn
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
-        max_tokens: 1000,
+        max_tokens: 3000,
         messages: [{ role: 'user', content: prompt }],
       }),
     });
@@ -167,9 +172,15 @@ Respond ONLY with a JSON array (no markdown, no commentary), one object per runn
     }
     const text = claudeData.content.map(b => b.text || '').join('\n');
     const clean = text.replace(/```json|```/g, '').trim();
-    const picks = JSON.parse(clean);
+    const parsed = JSON.parse(clean);
 
-    return res.status(200).json({ picks, runners, meta });
+    return res.status(200).json({
+      verdict: parsed.verdict,
+      verdictReason: parsed.verdictReason,
+      picks: parsed.picks,
+      runners,
+      meta,
+    });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: err.message });
