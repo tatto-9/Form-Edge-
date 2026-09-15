@@ -133,6 +133,33 @@
   .btn-main:hover{background:var(--turf-light);}
   .btn-main:disabled{opacity:0.5;cursor:default;}
   #results{margin-top:30px;}
+  .verdict{
+    padding:16px;
+    border-radius:3px;
+    margin-bottom:16px;
+    border:1px solid;
+  }
+  .verdict-avoid{
+    background:#2a1815;
+    border-color:var(--risk);
+  }
+  .verdict-play{
+    background:#16251a;
+    border-color:var(--turf-light);
+  }
+  .verdict-title{
+    font-family:'Roboto Slab', serif;
+    font-weight:700;
+    font-size:15px;
+    margin-bottom:6px;
+  }
+  .verdict-avoid .verdict-title{color:var(--risk);}
+  .verdict-play .verdict-title{color:var(--turf-light);}
+  .verdict-reason{
+    font-size:12.5px;
+    color:var(--parchment-dim);
+    line-height:1.5;
+  }
   .pick{
     background:var(--panel);
     border-left:3px solid var(--brass);
@@ -324,7 +351,7 @@ async function loadSelectedRace(){
       barrier: r.barrier, form: r.form, odds: r.odds
     }));
 
-    renderPicks(data.picks);
+    renderResults(data);
   }catch(err){
     console.error(err);
     resultsEl.innerHTML = '<div class="error">Couldn\'t load that race. Try manual entry instead.</div>';
@@ -333,10 +360,23 @@ async function loadSelectedRace(){
   }
 }
 
-function renderPicks(picks){
+function renderResults(data){
   const resultsEl = document.getElementById('results');
   resultsEl.innerHTML = '';
-  picks.forEach((p, i) => {
+
+  if(data.verdict === 'avoid'){
+    const banner = document.createElement('div');
+    banner.className = 'verdict verdict-avoid';
+    banner.innerHTML = `<div class="verdict-title">⚠ Stay out of this race</div><div class="verdict-reason">${data.verdictReason || ''}</div>`;
+    resultsEl.appendChild(banner);
+  } else if(data.verdict === 'play'){
+    const banner = document.createElement('div');
+    banner.className = 'verdict verdict-play';
+    banner.innerHTML = `<div class="verdict-title">✓ Playable race</div><div class="verdict-reason">${data.verdictReason || ''}</div>`;
+    resultsEl.appendChild(banner);
+  }
+
+  (data.picks || []).forEach((p, i) => {
     const div = document.createElement('div');
     div.className = 'pick';
     div.innerHTML = `
@@ -397,7 +437,7 @@ async function analyzeRace(){
 
     const data = await response.json();
     if(data.error) throw new Error(data.error);
-    renderPicks(data.picks);
+    renderResults(data);
   }catch(err){
     console.error(err);
     resultsEl.innerHTML = '<div class="error">Something went wrong generating the analysis. Try again.</div>';
