@@ -134,7 +134,17 @@ module.exports = async function handler(req, res) {
       ? `Full raw race data (JSON):\n${JSON.stringify(rawRace, null, 2)}`
       : `Race: ${meta.raceName || 'Unnamed race'}\nTrack: ${meta.track || 'Unspecified'}\nDistance: ${meta.distance || 'Unspecified'}\nGoing: ${meta.going || 'Unspecified'}`;
 
-    const prompt = `You are a horse racing form analyst. Analyze this race and rank the runners from most to least likely to win, based only on the data given. Be realistic — don't invent facts not provided. If odds are marked n/a, ignore them and reason from form, jockey, trainer, career/condition-specific records, and A2E stats instead. A2E (Actual-vs-Expected) above 1.0 means a jockey/trainer outperforms market expectation; below 1.0 means they underperform it — weigh this alongside raw strike rate. Note any gear changes, as they can signal a meaningful adjustment. Ignore fields that are clearly administrative or irrelevant to form (internal IDs, colour, silk colours, owners) unless they help you make sense of something else. If any field is blank or zero from lack of data, treat it as unknown rather than a meaningful zero.
+    const prompt = `You are a horse racing form analyst. Analyze this race and rank the runners from most to least likely to win, based only on the data given. Be realistic — don't invent facts not provided.
+
+Weigh the data in this priority order, based on established handicapping principles:
+1. Recent form trend (the "last10" string) and overall class level (raceClass vs. the horse's career earnings/record) — these are your best available proxies for speed and current ability, since this data source does not include a computed speed figure.
+2. Distance/track/going-specific history — trackRecord, distanceRecord, trackDistRecord, and the condition-specific records (goodRecord/softRecord/heavyRecord/syntheticRecord) that match today's going. First-up/second-up record matters if the horse is fresh off a spell.
+3. Jockey/trainer/combo A2E stats — a real but secondary signal. A2E above 1.0 means outperforming market expectation, below 1.0 underperforming. Don't let a strong A2E override poor recent form or an unsuitable class step.
+4. Gear changes, weight, barrier, pedigree — minor factors, mainly useful as tie-breakers or in specific situations (e.g. wet-track pedigree when the going is soft/heavy).
+
+Important limitation to keep in mind: this data source does not include pace/running-style tags or track bias information — both are considered major factors in professional handicapping (how the race is likely to be run, and whether the track is currently favoring front-runners or closers). You cannot factor these in, so don't invent a running style or bias assessment that isn't supported by the data. If the race genuinely hinges on pace or bias that you can't assess, factor that uncertainty into your verdict rather than guessing.
+
+If odds are marked n/a, don't treat that as a signal either way. If any field is blank or zero from lack of data, treat it as unknown rather than a meaningful zero.
 
 ${raceSection}
 
@@ -146,7 +156,7 @@ Respond ONLY with a JSON object (no markdown, no commentary), in this exact shap
   "verdictReason": "1-2 sentence explanation of the verdict",
   "picks": [{"horse": "name", "confidence": 1-100, "reasoning": "1-2 sentence analysis"}]
 }
-Order "picks" from most to least likely to win. Set "verdict" to "avoid" when the race is genuinely too unclear or even to call — e.g. no runner has a real edge, the field is wide open with no standout form, or the data is too thin to say anything useful. A large field in a competitive handicap class is inherently harder to call than a small field or a maiden race — factor field size and class into how confident the verdict should be. Use "avoid" honestly; don't default to "play" just to give an answer.`;
+Order "picks" from most to least likely to win. Set "verdict" to "avoid" when the race is genuinely too unclear or even to call — e.g. no runner has a real edge, the field is wide open with no standout form, the outcome plausibly hinges on pace or track bias that you have no data for, or the data is too thin to say anything useful. A large field in a competitive handicap class is inherently harder to call than a small field or a maiden race — factor field size and class into how confident the verdict should be. Use "avoid" honestly; don't default to "play" just to give an answer.`;
 
     const claudeResponse = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
