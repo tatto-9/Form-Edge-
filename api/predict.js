@@ -27,6 +27,8 @@ module.exports = async function handler(req, res) {
   try {
     let runners;
     let raceMeta;
+    let rawRunners; // full, unfiltered Punting Form data for the prompt (raceId path only)
+    let rawRace;
 
     if (raceId) {
       // --- Live data path: raceId is "meetingId|raceNumber" ---
@@ -89,6 +91,15 @@ module.exports = async function handler(req, res) {
           odds: 'n/a', // Punting Form doesn't provide market odds — that's Betfair's job, added later
         }));
 
+      // Full raw data — everything Punting Form sent, minus only the
+      // scratched runners, so nothing gets curated away from Claude.
+      rawRunners = fieldRunners.filter(r => !scratchedTabs.has(r.tabNo));
+      // The race object without its nested runners array, since that's
+      // already being sent separately as rawRunners (avoids duplicating
+      // the same runner data twice in the prompt).
+      const { runners: _omit, ...raceWithoutRunners } = race;
+      rawRace = raceWithoutRunners;
+
       raceMeta = {
         track: (payload.track && payload.track.name) || track || '',
         distance: race.distance || distance || '',
@@ -113,43 +124,21 @@ module.exports = async function handler(req, res) {
     // otherwise use whatever the manual entry form sent.
     const meta = raceMeta || { track, distance, going, raceName };
 
-    const runnerLines = runners
-      .map(r => {
-        // Manual entry runners only have the basic fields — keep it simple
-        // for those. Live (Punting Form) runners get the full picture.
-        if (!r.trainer && !r.careerRecord) {
-          return `- ${r.horse} | Jockey: ${r.jockey || 'n/a'} | Weight: ${r.weight || 'n/a'} | Barrier: ${r.barrier || 'n/a'} | Recent form: ${r.form || 'n/a'} | Odds: ${r.odds || 'n/a'}`;
-        }
-        const extras = [
-          r.trainer && `Trainer: ${r.trainer}`,
-          (r.age || r.sex) && `${r.age || '?'}yo ${r.sex || ''}`.trim(),
-          r.weightTotal && r.weightTotal !== r.weight && `Weight: ${r.weight}kg (allocated ${r.weightTotal}kg)`,
-          r.careerRecord && `Career: ${r.careerRecord}`,
-          r.trackRecord && `Track record: ${r.trackRecord}`,
-          r.distanceRecord && `Distance record: ${r.distanceRecord}`,
-          r.trackDistRecord && `Track+distance record: ${r.trackDistRecord}`,
-          r.firstUpRecord && `First-up record: ${r.firstUpRecord}`,
-          r.secondUpRecord && `Second-up record: ${r.secondUpRecord}`,
-          r.jockeyA2ECareer && `Jockey A2E (career): ${r.jockeyA2ECareer}`,
-          r.trainerA2ECareer && `Trainer A2E (career): ${r.trainerA2ECareer}`,
-          r.trainerJockeyA2ECareer && `Trainer+jockey combo A2E: ${r.trainerJockeyA2ECareer}`,
-          r.jockeyA2ELast100 && `Jockey A2E (last 100 rides): ${r.jockeyA2ELast100}`,
-          r.gearChanges && `Gear changes: ${r.gearChanges}`,
-        ].filter(Boolean).join(' | ');
+    const usingRawData = !!rawRunners;
 
-        return `- ${r.horse} | Jockey: ${r.jockey || 'n/a'} | Weight: ${r.weight || 'n/a'} | Barrier: ${r.barrier || 'n/a'} | Recent form: ${r.form || 'n/a'} | Odds: ${r.odds || 'n/a'} | ${extras}`;
-      })
-      .join('\n');
+    const runnerSection = usingRawData
+      ? `Full raw data for every runner (JSON), including career and condition-specific records, A2E stats for jockey/trainer/combo, pedigree, gear changes, and everything else Punting Form provides:\n${JSON.stringify(rawRunners, null, 2)}`
+      : `Runners:\n${runners.map(r => `- ${r.horse} | Jockey: ${r.jockey || 'n/a'} | Weight: ${r.weight || 'n/a'} | Barrier: ${r.barrier || 'n/a'} | Recent form: ${r.form || 'n/a'} | Odds: ${r.odds || 'n/a'}`).join('\n')}`;
 
-    const prompt = `You are a horse racing form analyst. Analyze this race and rank the runners from most to least likely to win, based only on the data given. Be realistic — don't invent facts not provided. If odds are marked n/a, ignore them and reason from form, jockey, trainer, career/track/distance records, and A2E stats instead. A2E (Actual-vs-Expected) above 1.0 means a jockey/trainer outperforms market expectation; below 1.0 means they underperform it — weigh this alongside raw strike rate. Note any gear changes, as they can signal a meaningful adjustment. If any field is blank, just work with whatever is actually provided.
+    const raceSection = usingRawData
+      ? `Full raw race data (JSON):\n${JSON.stringify(rawRace, null, 2)}`
+      : `Race: ${meta.raceName || 'Unnamed race'}\nTrack: ${meta.track || 'Unspecified'}\nDistance: ${meta.distance || 'Unspecified'}\nGoing: ${meta.going || 'Unspecified'}`;
 
-Race: ${meta.raceName || 'Unnamed race'}
-Track: ${meta.track || 'Unspecified'}
-Distance: ${meta.distance || 'Unspecified'}
-Going: ${meta.going || 'Unspecified'}${meta.raceClass ? `\nClass: ${meta.raceClass}` : ''}${meta.weightType ? `\nWeight type: ${meta.weightType}` : ''}${meta.fieldSize ? `\nField size: ${meta.fieldSize} runners` : ''}${meta.prizeMoney ? `\nPrize money: $${meta.prizeMoney}` : ''}${meta.jockeyRestrictions ? `\nRestrictions: ${meta.jockeyRestrictions}` : ''}${meta.ageRestrictions ? ` ${meta.ageRestrictions}` : ''}${meta.sexRestrictions ? ` ${meta.sexRestrictions}` : ''}
+    const prompt = `You are a horse racing form analyst. Analyze this race and rank the runners from most to least likely to win, based only on the data given. Be realistic — don't invent facts not provided. If odds are marked n/a, ignore them and reason from form, jockey, trainer, career/condition-specific records, and A2E stats instead. A2E (Actual-vs-Expected) above 1.0 means a jockey/trainer outperforms market expectation; below 1.0 means they underperform it — weigh this alongside raw strike rate. Note any gear changes, as they can signal a meaningful adjustment. Ignore fields that are clearly administrative or irrelevant to form (internal IDs, colour, silk colours, owners) unless they help you make sense of something else. If any field is blank or zero from lack of data, treat it as unknown rather than a meaningful zero.
 
-Runners:
-${runnerLines}
+${raceSection}
+
+${runnerSection}
 
 Respond ONLY with a JSON object (no markdown, no commentary), in this exact shape:
 {
