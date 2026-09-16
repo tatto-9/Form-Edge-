@@ -29,6 +29,7 @@ module.exports = async function handler(req, res) {
     let raceMeta;
     let rawRunners; // full, unfiltered Punting Form data for the prompt (raceId path only)
     let rawRace;
+    let speedMap;
 
     if (raceId) {
       // --- Live data path: raceId is "meetingId|raceNumber" ---
@@ -61,6 +62,18 @@ module.exports = async function handler(req, res) {
         );
       } catch (scratchErr) {
         console.error('Scratchings lookup failed, continuing without it:', scratchErr.message);
+      }
+
+      // Speed map: run-style/barrier-based positional advantage per runner.
+      // Best-effort, same as scratchings — the exact response shape hasn't
+      // been confirmed against real data, so if it fails or doesn't match,
+      // we continue without it rather than breaking the whole race.
+      speedMap = null;
+      try {
+        const speedMapData = await pfGet('/User/Speedmaps', { meetingId, raceNo: raceNumber });
+        speedMap = speedMapData.payLoad || null;
+      } catch (speedMapErr) {
+        console.error('Speed map lookup failed, continuing without it:', speedMapErr.message);
       }
 
       runners = fieldRunners
@@ -134,19 +147,22 @@ module.exports = async function handler(req, res) {
       ? `Full raw race data (JSON):\n${JSON.stringify(rawRace, null, 2)}`
       : `Race: ${meta.raceName || 'Unnamed race'}\nTrack: ${meta.track || 'Unspecified'}\nDistance: ${meta.distance || 'Unspecified'}\nGoing: ${meta.going || 'Unspecified'}`;
 
+    const speedMapSection = speedMap
+      ? `\n\nSpeed map (run-style and barrier-based positional advantage per runner — reflects how the race is likely to be run and who's favoured or disadvantaged by their expected running position):\n${JSON.stringify(speedMap, null, 2)}`
+      : '';
+
     const prompt = `You are a horse racing form analyst. Analyze this race and rank the runners from most to least likely to win, based only on the data given. Be realistic — don't invent facts not provided.
 
 Weigh the data in this priority order, based on established handicapping principles:
-1. Recent form trend (the "last10" string) and overall class level (raceClass vs. the horse's career earnings/record) — these are your best available proxies for speed and current ability, since this data source does not include a computed speed figure.
-2. Distance/track/going-specific history — trackRecord, distanceRecord, trackDistRecord, and the condition-specific records (goodRecord/softRecord/heavyRecord/syntheticRecord) that match today's going. First-up/second-up record matters if the horse is fresh off a spell.
-3. Jockey/trainer/combo A2E stats — a real but secondary signal. A2E above 1.0 means outperforming market expectation, below 1.0 underperforming. Don't let a strong A2E override poor recent form or an unsuitable class step.
-4. Gear changes, weight, barrier, pedigree — minor factors, mainly useful as tie-breakers or in specific situations (e.g. wet-track pedigree when the going is soft/heavy).
-
-Important limitation to keep in mind: this data source does not include pace/running-style tags or track bias information — both are considered major factors in professional handicapping (how the race is likely to be run, and whether the track is currently favoring front-runners or closers). You cannot factor these in, so don't invent a running style or bias assessment that isn't supported by the data. If the race genuinely hinges on pace or bias that you can't assess, factor that uncertainty into your verdict rather than guessing.
+1. Recent form trend (the "last10" string) and overall class level (raceClass vs. the horse's career earnings/record) — your best available proxies for speed and current ability, since raw speed figures aren't provided.
+2. ${speedMap ? 'The speed map — how the race is likely to be run, and which runners are positionally favoured or disadvantaged by their expected running style and barrier. Pace shape and track bias are major factors in professional handicapping, so weigh this heavily when the speed map data is clear.' : 'Pace/running-style and track bias would normally be a major factor here, but no speed map data was available for this race — don\'t invent a running style or bias assessment that isn\'t supported by the data, and factor that gap into your confidence.'}
+3. Distance/track/going-specific history — trackRecord, distanceRecord, trackDistRecord, and the condition-specific records (goodRecord/softRecord/heavyRecord/syntheticRecord) that match today's going. First-up/second-up record matters if the horse is fresh off a spell.
+4. Jockey/trainer/combo A2E stats — a real but secondary signal. A2E above 1.0 means outperforming market expectation, below 1.0 underperforming. Don't let a strong A2E override poor recent form or an unsuitable class step.
+5. Gear changes, weight, barrier, pedigree — minor factors, mainly useful as tie-breakers or in specific situations (e.g. wet-track pedigree when the going is soft/heavy).
 
 If odds are marked n/a, don't treat that as a signal either way. If any field is blank or zero from lack of data, treat it as unknown rather than a meaningful zero.
 
-${raceSection}
+${raceSection}${speedMapSection}
 
 ${runnerSection}
 
