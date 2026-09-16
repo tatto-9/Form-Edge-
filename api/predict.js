@@ -94,6 +94,13 @@ module.exports = async function handler(req, res) {
         distance: race.distance || distance || '',
         going: payload.expectedCondition || going || '',
         raceName: race.name || raceName || `Race ${raceNumber}`,
+        raceClass: race.raceClass || '',
+        weightType: race.weightType || '',
+        prizeMoney: race.prizeMoney || '',
+        fieldSize: fieldRunners.length,
+        jockeyRestrictions: race.jockeyRestrictions || '',
+        ageRestrictions: race.ageRestrictions || '',
+        sexRestrictions: race.sexRestrictions || '',
       };
     } else if (manualRunners && manualRunners.length >= 2) {
       // --- Manual entry path (what the current prototype uses) ---
@@ -139,7 +146,7 @@ module.exports = async function handler(req, res) {
 Race: ${meta.raceName || 'Unnamed race'}
 Track: ${meta.track || 'Unspecified'}
 Distance: ${meta.distance || 'Unspecified'}
-Going: ${meta.going || 'Unspecified'}
+Going: ${meta.going || 'Unspecified'}${meta.raceClass ? `\nClass: ${meta.raceClass}` : ''}${meta.weightType ? `\nWeight type: ${meta.weightType}` : ''}${meta.fieldSize ? `\nField size: ${meta.fieldSize} runners` : ''}${meta.prizeMoney ? `\nPrize money: $${meta.prizeMoney}` : ''}${meta.jockeyRestrictions ? `\nRestrictions: ${meta.jockeyRestrictions}` : ''}${meta.ageRestrictions ? ` ${meta.ageRestrictions}` : ''}${meta.sexRestrictions ? ` ${meta.sexRestrictions}` : ''}
 
 Runners:
 ${runnerLines}
@@ -150,7 +157,7 @@ Respond ONLY with a JSON object (no markdown, no commentary), in this exact shap
   "verdictReason": "1-2 sentence explanation of the verdict",
   "picks": [{"horse": "name", "confidence": 1-100, "reasoning": "1-2 sentence analysis"}]
 }
-Order "picks" from most to least likely to win. Set "verdict" to "avoid" when the race is genuinely too unclear or even to call — e.g. no runner has a real edge, the field is wide open with no standout form, or the data is too thin to say anything useful. Use "avoid" honestly; don't default to "play" just to give an answer.`;
+Order "picks" from most to least likely to win. Set "verdict" to "avoid" when the race is genuinely too unclear or even to call — e.g. no runner has a real edge, the field is wide open with no standout form, or the data is too thin to say anything useful. A large field in a competitive handicap class is inherently harder to call than a small field or a maiden race — factor field size and class into how confident the verdict should be. Use "avoid" honestly; don't default to "play" just to give an answer.`;
 
     const claudeResponse = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
