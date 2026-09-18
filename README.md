@@ -1,78 +1,70 @@
 # FormEdge — Setup Guide
 
-This turns the prototype into a real, deployed site with a backend that
-keeps your API keys secret. No coding experience needed for these steps —
-just following along.
+A personal race analysis tool: pulls real Punting Form data (form,
+jockey/trainer stats, speed maps) and Betfair live odds, sends it all to
+Claude for analysis, and tracks your saved picks' results over time.
 
 ## What's in this folder
 
-- `public/index.html` — the page people see (the form + results UI)
-- `api/predict.js` — analyzes a race (from Punting Form or manual entry) using Claude
-- `api/races.js` — lists today's AU race meetings and races from Punting Form
+- `public/index.html` — the page you see (race picker, manual entry, results, My Picks)
+- `api/predict.js` — analyzes a single race (Punting Form + Betfair, or manual entry) using Claude
+- `api/tipsheet.js` — analyzes every upcoming race at a venue and returns a consolidated tip sheet
+- `lib/analyzeRace.js` — the shared analysis logic used by both predict.js and tipsheet.js
+- `api/races.js` — lists today's/tomorrow's AU race meetings and races from Punting Form
+- `api/picks.js` — saves picks and lists them with running profit/loss (needs Postgres)
+- `api/check-results.js` — checks saved picks against Punting Form's Results endpoint
 - `lib/puntingform.js` — shared Punting Form API-call helper
-- `lib/betfair.js` — Betfair helper from an earlier step, not currently used
-  by predict.js/races.js — kept for when Betfair's live odds get merged in
-- `package.json` — tells Vercel this is a project it can build
+- `lib/betfair.js` — Betfair login + odds-matching helper
+- `package.json` — tells Vercel this is a project it can build, and lists its one dependency
 
 ## Step 1 — Get your API keys
 
-**Anthropic (Claude) API key:**
-1. Go to console.anthropic.com and sign up / log in
-2. Create an API key — this is separate from your claude.ai chat account,
-   and it's billed by usage (pay-as-you-go)
+**Anthropic (Claude):** console.anthropic.com → create an API key (pay-as-you-go billing).
 
-**Punting Form API key:** you already have this from your Starter
-subscription (support@puntingform.com.au sent it). You'll need it for the
-`PUNTINGFORM_API_KEY` environment variable in Step 3.
+**Punting Form:** you already have this from your Starter subscription.
 
-Until these are set up, the site still works fully using the manual entry
-form — the backend just skips the live-data step.
+**Betfair:** a Developer App Key (Delayed tier is fine to start) plus your normal Betfair username/password — see the earlier walkthrough for creating this via api.developer.betfair.com.
 
-**Note on what Punting Form gives you:** runner names, jockey, weight,
-barrier, and recent form — not live odds. The AI reasons from form data
-only for now. Live market odds come later when Betfair is merged in
-(see "What's next" below).
+## Step 2 — Set up a database (for tracking picks)
 
-**Note on response field names:** Punting Form's docs
-(docs.puntingform.com.au) confirm the real endpoints and request
-parameters, but don't publicly show the exact response JSON field names
-(their docs site renders that part client-side). The code in `api/races.js`
-and `api/predict.js` checks a couple of likely name variants, but if races
-or runners don't show up correctly once deployed, that's the first thing
-to check — open the Punting Form URL directly in a browser (with your
-apiKey appended) to see the real response and adjust the field names in
-the code to match.
+1. In your Vercel project, go to the **Storage** tab
+2. Click **Create Database** → choose **Postgres**
+3. Follow the prompts to create it and connect it to this project — Vercel
+   automatically adds the needed environment variables (like `POSTGRES_URL`)
+   for you, no manual copying required
+4. `api/picks.js` creates its own table automatically the first time it runs
 
-## Step 2 — Put this project on GitHub
+## Step 3 — Put this project on GitHub
 
-1. Create a free account at github.com if you don't have one
-2. Create a new repository (e.g. "formedge")
-3. Upload this whole folder to it (GitHub's website has an "upload files"
-   button — no command line needed)
+Create a repo, upload this folder's contents (not the folder itself — see
+the earlier note about avoiding an extra nested folder), keeping the
+`api`/`lib`/`public` structure intact.
 
-## Step 3 — Deploy to Vercel
+## Step 4 — Deploy to Vercel
 
-1. Create a free account at vercel.com, signing in with your GitHub account
-2. Click "Add New Project", pick your `formedge` repository, click Deploy
-3. Once deployed, go to Project Settings → Environment Variables and add:
-   - `ANTHROPIC_API_KEY` = your Anthropic key from Step 1
-   - `PUNTINGFORM_API_KEY` = your Punting Form API key
-4. Redeploy (Vercel will prompt you to, so the new variables take effect)
+1. Import the repo as a new Vercel project
+2. Settings → Environment Variables, add:
+   - `ANTHROPIC_API_KEY`
+   - `PUNTINGFORM_API_KEY`
+   - `BETFAIR_APP_KEY`, `BETFAIR_USERNAME`, `BETFAIR_PASSWORD`
+3. Redeploy so the variables and the Postgres connection take effect
 
-Vercel will give you a live URL (like `formedge.vercel.app`) — that's your
-site, working, with real API keys held safely on the server.
+## Note on response field names
+
+Several Punting Form and Betfair endpoints had their exact response shape
+confirmed against real data during development (meetingslist, fields,
+form) — but a few newer additions (results, speedmaps) are still
+best-effort guesses, since Punting Form's docs site doesn't publicly show
+response schemas. If results-checking or the speed map ever come back
+empty, that's the first thing to check: fetch the endpoint directly in a
+browser with your apiKey appended and compare the real shape to the code.
 
 ## What's next
 
-- Custom domain (e.g. formedge.com.au) — buy one and add it in Vercel's
-  Domains settings
-- Unit profit/loss tracking — needs a database (Vercel Postgres slots in
-  easily) to record each pick's stake, odds, and result over time, plus a
-  way to mark bets won/lost (or later, auto-pull settled results).
-- Merging in Betfair's live odds alongside Punting Form's form data — the
-  Betfair code from an earlier step (`lib/betfair.js`) is already written
-  and ready; it just needs to be called in `api/predict.js` too, then
-  merge by saddlecloth/runner number rather than horse name, since name
-  text won't always match exactly between the two providers
 - Certificate-based Betfair login — more robust than username/password for
-  frequent automated use; worth moving to once Betfair's merged in
+  frequent automated use
+- Custom domain
+- Ratings endpoint (Punting Form's own computed rating) — needs separate
+  token auth beyond the API key, would give a second opinion to cross-check
+  against Claude's analysis
+- A results dashboard beyond the simple list — win rate by track/class/etc.
