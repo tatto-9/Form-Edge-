@@ -6,6 +6,7 @@
 // concurrently for a big field of races.
 
 const { pfGet } = require('../lib/puntingform');
+const { raceHasStarted } = require('../lib/raceTime');
 const { analyzeRace } = require('../lib/analyzeRace');
 
 module.exports = async function handler(req, res) {
@@ -28,10 +29,7 @@ module.exports = async function handler(req, res) {
 
     // Only analyze races that haven't started yet — same reasoning as the
     // race picker: no point tip-sheeting a race that's already finished.
-    const upcoming = allRaces.filter(r => {
-      const start = r.startTime ? new Date(r.startTime) : null;
-      return !start || start.getTime() >= Date.now();
-    });
+    const upcoming = allRaces.filter(r => !raceHasStarted(r.startTime));
 
     if (upcoming.length === 0) {
       return res.status(200).json({ track, races: [] });
