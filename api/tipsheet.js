@@ -1,11 +1,9 @@
 // /api/tipsheet — analyzes every upcoming race at a single venue/meeting
 // and returns a consolidated tip sheet, instead of one race at a time.
 //
-// Races are analyzed one at a time in sequence (not in parallel) — each
-// one involves its own Betfair login, and hammering that concurrently for
-// a big field of races risks rate limits or session conflicts. This is
-// slower but more reliable; a meeting with 8 races might take a minute
-// or so to fully process.
+// Races are analyzed one at a time in sequence (not in parallel) —
+// keeping this simple and sequential rather than hammering the API
+// concurrently for a big field of races.
 
 const { pfGet } = require('../lib/puntingform');
 const { analyzeRace } = require('../lib/analyzeRace');
