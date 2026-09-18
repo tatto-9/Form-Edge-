@@ -414,14 +414,22 @@ async function loadTipSheet(){
   }
 }
 
+let latestRaceRequest = 0;
+
 async function loadSelectedRace(){
   const raceId = document.getElementById('racePicker').value;
   if(!raceId) return;
+
+  const requestId = ++latestRaceRequest;
 
   const btn = document.getElementById('analyzeBtn');
   const resultsEl = document.getElementById('results');
   btn.disabled = true;
   resultsEl.innerHTML = '<div class="loading">Loading race and analyzing...</div>';
+  // Clear the old runner table immediately, rather than leaving stale rows
+  // visible while the new race loads.
+  document.getElementById('runnerBody').innerHTML = '';
+  rowCount = 0;
 
   try{
     const response = await fetch('/api/predict', {
@@ -431,6 +439,10 @@ async function loadSelectedRace(){
     });
     const data = await response.json();
     if(data.error) throw new Error(data.error);
+
+    // If a newer race was requested while this one was still loading,
+    // discard this result — it's stale.
+    if(requestId !== latestRaceRequest) return;
 
     // Auto-fill the race details and runner table from what came back
     document.getElementById('track').value = data.meta.track || '';
@@ -459,10 +471,11 @@ async function loadSelectedRace(){
 
     renderResults(data);
   }catch(err){
+    if(requestId !== latestRaceRequest) return; // a newer request superseded this one
     console.error(err);
     resultsEl.innerHTML = '<div class="error">Couldn\'t load that race. Try manual entry instead.</div>';
   }finally{
-    btn.disabled = false;
+    if(requestId === latestRaceRequest) btn.disabled = false;
   }
 }
 
