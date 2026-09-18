@@ -9,12 +9,7 @@
 // your apiKey) to see the real field names and adjust the code below.
 
 const { pfGet } = require('../lib/puntingform');
-
-function formatDate(d) {
-  // Punting Form expects d-MMM-yyyy, e.g. 14-Sep-2026
-  const month = d.toLocaleString('en-US', { month: 'short' });
-  return `${d.getDate()}-${month}-${d.getFullYear()}`;
-}
+const { todayInSydney, raceHasStarted } = require('../lib/raceTime');
 
 module.exports = async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -22,11 +17,11 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    // ?dayOffset=1 -> tomorrow's races (e.g. checking the night before)
+    // ?dayOffset=1 -> tomorrow's races (e.g. checking the night before).
+    // Computed in Australian time (see lib/raceTime.js) — the server
+    // itself runs in UTC.
     const dayOffset = parseInt(req.query.dayOffset, 10) || 0;
-    const targetDate = new Date();
-    targetDate.setDate(targetDate.getDate() + dayOffset);
-    const meetingDate = formatDate(targetDate);
+    const meetingDate = todayInSydney(dayOffset);
 
     const meetingsData = await pfGet('/form/meetingslist', { meetingDate });
     const meetings = meetingsData.payLoad || [];
@@ -49,13 +44,9 @@ module.exports = async function handler(req, res) {
         meetingRaces.forEach(r => {
           const raceNumber = r.number;
           // Skip races that have already started/finished — no point
-          // "predicting" a race whose result already happened. For a
-          // future day this never trips, since every race on it is ahead
-          // of now.
-          // startTime looks like "9/14/2026 2:35:00 PM" (confirmed from a
-          // real response) — the Date constructor parses that format fine.
-          const start = r.startTime ? new Date(r.startTime) : null;
-          if (start && start.getTime() < Date.now()) return;
+          // "predicting" a race whose result already happened. Compared
+          // correctly in Australian time, not the server's own clock.
+          if (raceHasStarted(r.startTime)) return;
 
           races.push({
             raceId: `${meetingId}|${raceNumber}`,
@@ -76,4 +67,4 @@ module.exports = async function handler(req, res) {
     console.error(err);
     return res.status(500).json({ error: err.message });
   }
-}
+};
