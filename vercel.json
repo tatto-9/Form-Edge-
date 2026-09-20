@@ -1,8 +1,5 @@
 {
   "functions": {
-    "api/tipsheet.js": {
-      "maxDuration": 300
-    },
     "api/predict.js": {
       "maxDuration": 60
     }
