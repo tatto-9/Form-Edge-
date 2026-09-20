@@ -365,6 +365,29 @@ loadTodaysRaces();
 // for a single race), so a network hiccup only affects the one race in
 // flight, not the whole card, and results appear incrementally as each
 // one finishes instead of all at once at the end.
+let tipSheetPickCache = {};
+
+async function saveTipSheetPick(id, btnEl){
+  const info = tipSheetPickCache[id];
+  if(!info) return;
+  btnEl.disabled = true;
+  btnEl.textContent = 'Saving...';
+  try{
+    const res = await fetch('/api/picks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(info)
+    });
+    const data = await res.json();
+    if(data.error) throw new Error(data.error);
+    btnEl.textContent = '✓ Saved';
+  }catch(err){
+    console.error(err);
+    btnEl.textContent = 'Save failed';
+    btnEl.disabled = false;
+  }
+}
+
 async function loadTipSheet(){
   const meetingId = document.getElementById('venuePicker').value;
   if(!meetingId) return;
@@ -377,12 +400,18 @@ async function loadTipSheet(){
   btn.disabled = true;
   note.textContent = '';
   resultsEl.innerHTML = '';
+  tipSheetPickCache = {};
 
   if(venueRaces.length === 0){
     note.textContent = 'No upcoming races found at this venue.';
     btn.disabled = false;
     return;
   }
+
+  const dayOffset = parseInt(document.getElementById('dayToggle').value, 10) || 0;
+  const raceDateObj = new Date();
+  raceDateObj.setDate(raceDateObj.getDate() + dayOffset);
+  const raceDate = raceDateObj.toISOString().slice(0, 10);
 
   for(let i = 0; i < venueRaces.length; i++){
     const r = venueRaces[i];
@@ -404,9 +433,23 @@ async function loadTipSheet(){
 
       const verdictColor = data.verdict === 'avoid' ? 'var(--risk)' : 'var(--turf-light)';
       const verdictLabel = data.verdict === 'avoid' ? '⚠ AVOID' : '✓ PLAY';
-      const picksHtml = (data.picks || []).slice(0, 3).map((p, idx) =>
-        `${idx===0 ? '<strong>' : ''}${p.horse} (${p.confidence}%)${idx===0 ? '</strong>' : ''}`
-      ).join(' · ');
+
+      const oddsByHorse = {};
+      (data.runners || []).forEach(rn => { oddsByHorse[rn.horse] = rn.odds; });
+
+      const picksHtml = (data.picks || []).slice(0, 3).map((p, idx) => {
+        const id = `${r.raceNumber}-${idx}`;
+        const odds = oddsByHorse[p.horse];
+        tipSheetPickCache[id] = {
+          raceDate, track: r.track, raceNumber: r.raceNumber,
+          raceName: r.raceName, meetingId,
+          horse: p.horse,
+          odds: (odds && odds !== 'n/a') ? odds : null,
+        };
+        const label = `${p.horse} (${p.confidence}%)`;
+        return `${idx===0 ? `<strong>${label}</strong>` : label} <button class="btn" style="padding:2px 8px;font-size:11px;margin-left:4px;" onclick="saveTipSheetPick('${id}', this)">Save</button>`;
+      }).join(' · ');
+
       div.innerHTML = `
         <div class="pick-top">
           <div class="pick-name">R${r.raceNumber} — ${r.raceName}</div>
