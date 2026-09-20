@@ -312,6 +312,8 @@ for(let i=0;i<4;i++) addRow();
 
 // --- Race picker: loads today's races and can auto-fill everything below ---
 
+let latestRacesData = []; // stored so the tip sheet can reuse it per-venue
+
 async function loadTodaysRaces(){
   const picker = document.getElementById('racePicker');
   const note = document.getElementById('racePickerNote');
@@ -323,6 +325,8 @@ async function loadTodaysRaces(){
     const res = await fetch(`/api/races?dayOffset=${dayOffset}`);
     const data = await res.json();
     if(data.error) throw new Error(data.error);
+
+    latestRacesData = data.races;
 
     picker.innerHTML = '<option value="">Select a race…</option>';
     data.races.forEach(r => {
@@ -355,63 +359,73 @@ async function loadTodaysRaces(){
 }
 loadTodaysRaces();
 
+// The tip sheet calls /api/predict once per race, one at a time, from the
+// browser itself — rather than one long server-side request. Each
+// individual call is short (same endpoint that already works reliably
+// for a single race), so a network hiccup only affects the one race in
+// flight, not the whole card, and results appear incrementally as each
+// one finishes instead of all at once at the end.
 async function loadTipSheet(){
   const meetingId = document.getElementById('venuePicker').value;
   if(!meetingId) return;
+
+  const venueRaces = latestRacesData.filter(r => r.raceId.split('|')[0] === meetingId);
 
   const btn = document.getElementById('tipSheetBtn');
   const note = document.getElementById('tipSheetNote');
   const resultsEl = document.getElementById('tipSheetResults');
   btn.disabled = true;
-  btn.textContent = 'Generating (this can take a minute for a full card)...';
   note.textContent = '';
   resultsEl.innerHTML = '';
 
-  try{
-    const res = await fetch('/api/tipsheet', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ meetingId })
-    });
-    const data = await res.json();
-    if(data.error) throw new Error(data.error);
-
-    if(data.races.length === 0){
-      note.textContent = 'No upcoming races found at this venue.';
-    }
-
-    data.races.forEach(r => {
-      const div = document.createElement('div');
-      div.className = 'pick';
-      if(r.error){
-        div.innerHTML = `
-          <div class="pick-top"><div class="pick-name">R${r.raceNumber} — ${r.raceName}</div></div>
-          <div class="pick-note" style="color:var(--risk)">Couldn't analyze this race: ${r.error}</div>
-        `;
-      } else {
-        const verdictColor = r.verdict === 'avoid' ? 'var(--risk)' : 'var(--turf-light)';
-        const verdictLabel = r.verdict === 'avoid' ? '⚠ AVOID' : '✓ PLAY';
-        const picksHtml = (r.picks || []).map((p, i) =>
-          `${i===0 ? '<strong>' : ''}${p.horse} (${p.confidence}%)${i===0 ? '</strong>' : ''}`
-        ).join(' · ');
-        div.innerHTML = `
-          <div class="pick-top">
-            <div class="pick-name">R${r.raceNumber} — ${r.raceName}</div>
-            <div class="pick-rank" style="color:${verdictColor}">${verdictLabel}</div>
-          </div>
-          <div class="pick-note">${r.verdictReason || ''}</div>
-          <div class="pick-note" style="margin-top:6px;">${picksHtml}</div>
-        `;
-      }
-      resultsEl.appendChild(div);
-    });
-  }catch(err){
-    console.error(err);
-    note.textContent = 'Something went wrong generating the tip sheet.';
-  }finally{
+  if(venueRaces.length === 0){
+    note.textContent = 'No upcoming races found at this venue.';
     btn.disabled = false;
-    btn.textContent = 'Generate Tip Sheet';
+    return;
   }
+
+  for(let i = 0; i < venueRaces.length; i++){
+    const r = venueRaces[i];
+    btn.textContent = `Analyzing race ${i+1} of ${venueRaces.length}...`;
+
+    const div = document.createElement('div');
+    div.className = 'pick';
+    div.innerHTML = `<div class="pick-top"><div class="pick-name">R${r.raceNumber} — ${r.raceName}</div></div><div class="pick-note">Analyzing...</div>`;
+    resultsEl.appendChild(div);
+
+    try{
+      const res = await fetch('/api/predict', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ raceId: r.raceId })
+      });
+      const data = await res.json();
+      if(data.error) throw new Error(data.error);
+
+      const verdictColor = data.verdict === 'avoid' ? 'var(--risk)' : 'var(--turf-light)';
+      const verdictLabel = data.verdict === 'avoid' ? '⚠ AVOID' : '✓ PLAY';
+      const picksHtml = (data.picks || []).slice(0, 3).map((p, idx) =>
+        `${idx===0 ? '<strong>' : ''}${p.horse} (${p.confidence}%)${idx===0 ? '</strong>' : ''}`
+      ).join(' · ');
+      div.innerHTML = `
+        <div class="pick-top">
+          <div class="pick-name">R${r.raceNumber} — ${r.raceName}</div>
+          <div class="pick-rank" style="color:${verdictColor}">${verdictLabel}</div>
+        </div>
+        <div class="pick-note">${data.verdictReason || ''}</div>
+        <div class="pick-note" style="margin-top:6px;">${picksHtml}</div>
+      `;
+    }catch(err){
+      console.error(err);
+      div.innerHTML = `
+        <div class="pick-top"><div class="pick-name">R${r.raceNumber} — ${r.raceName}</div></div>
+        <div class="pick-note" style="color:var(--risk)">Couldn't analyze this race: ${err.message}</div>
+      `;
+    }
+  }
+
+  btn.disabled = false;
+  btn.textContent = 'Generate Tip Sheet';
 }
 
 let latestRaceRequest = 0;
