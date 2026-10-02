@@ -1,13 +1,13 @@
 // /api/predict — Vercel serverless function
 // Runs on Vercel's server, never in the browser, so these env vars stay secret:
 //   PUNTINGFORM_API_KEY  -> from Punting Form support
-//   BETFAIR_APP_KEY / BETFAIR_USERNAME / BETFAIR_PASSWORD -> betfair.com
 //   ANTHROPIC_API_KEY    -> from console.anthropic.com
 //
-// Set all in Vercel: Project Settings -> Environment Variables
+// Set both in Vercel: Project Settings -> Environment Variables
 //
-// The actual analysis logic lives in lib/analyzeRace.js, shared with
-// api/tipsheet.js so a single race and a whole venue use the same code.
+// The actual analysis logic lives in lib/analyzeRace.js — also called once
+// per race by the tip sheet on the frontend, so a single race and a whole
+// venue use the same code.
 
 const { analyzeRace } = require('../lib/analyzeRace');
 
